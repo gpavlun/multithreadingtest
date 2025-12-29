@@ -145,6 +145,28 @@ void Display(void){
     int maxr,maxc;      // Terminal dimensions
     int i = 0;
     
+    // === Draw Menu Box Once (Static) ===
+    // Calculate menu position once
+    getmaxyx(stdscr, maxr, maxc);
+    r = maxr * 1/3;   // Menu positioned at 1/3 down the screen
+    c = maxc * .5;    // Horizontally centered
+
+
+    // Draw menu box border (only once)
+    mvwhline(stdscr, r - 3, c - (strlen(OptionHeader->Title)/2) - 3, ACS_HLINE, strlen(OptionHeader->Title) + 4);
+    mvwhline(stdscr, r + 2 + 4 , c - (strlen(OptionHeader->Title)/2) - 3, ACS_HLINE, strlen(OptionHeader->Title) + 4);
+    mvwvline(stdscr, r - 3, c - (strlen(OptionHeader->Title)/2) - 3, ACS_VLINE, 4 + 6);
+    mvwvline(stdscr, r - 3, c - (strlen(OptionHeader->Title)/2) + strlen(OptionHeader->Title) + 1, ACS_VLINE, 4 + 6);
+    mvwhline(stdscr, r - 3, c - (strlen(OptionHeader->Title)/2) - 3, ACS_ULCORNER, 1);
+    mvwhline(stdscr, r - 3, c + (strlen(OptionHeader->Title)/2) + 2, ACS_URCORNER, 1);
+    mvwhline(stdscr, r + 6, c - (strlen(OptionHeader->Title)/2) - 3, ACS_LLCORNER, 1);
+    mvwhline(stdscr, r + 6, c + (strlen(OptionHeader->Title)/2) + 2, ACS_LRCORNER, 1);
+    
+    // Draw menu header (title, "options", separator)
+    mvwprintw(stdscr, r - 2, c - (strlen(OptionHeader->Title)/2), "%s", OptionHeader->Title);
+    mvwprintw(stdscr, r , c - (strlen("options")/2), "options");
+    mvwprintw(stdscr, r + 1, c - (strlen("=======")/2), "=======");
+    
     // === Main Display Loop ===
     // Continuously reads from background and control pipes, renders to screen
     while(1){
@@ -165,16 +187,10 @@ void Display(void){
                 read(BackgroundPipe[0],&r,sizeof(int));
                 read(BackgroundPipe[0],&c,sizeof(int));
 
-                // Bounds check before reading
-                if(size < sizeof(buffer)){
-                    read(BackgroundPipe[0],wbuffer,size*4);
+                read(BackgroundPipe[0],wbuffer,size*4);
+                // Render text at specified screen position
+                mvwaddnwstr(stdscr,r,c,wbuffer,size);
 
-                    
-                    // Render text at specified screen position
-                    mvwaddnwstr(stdscr,r,c,wbuffer,size);
-                    //getch();
-                    
-                }
             }
         }
         size = 0;
@@ -182,13 +198,10 @@ void Display(void){
      
         // Get terminal dimensions and calculate menu center position
         getmaxyx(stdscr, maxr, maxc);
-
-        // === Redraw Menu Box (on top of background, without clearing) ===
-        // This keeps the menu visible over the background data
         r = maxr * 1/3;   // Menu positioned at 1/3 down the screen
         c = maxc * .5;    // Horizontally centered
-        
-        // Draw menu box border (directly, no clear needed)
+
+        // Draw menu box border using ncurses line drawing characters
         mvwhline(stdscr, r - 3, c - (strlen(OptionHeader->Title)/2) - 3, ACS_HLINE, strlen(OptionHeader->Title) + 4);
         mvwhline(stdscr, r + 2 + 4 , c - (strlen(OptionHeader->Title)/2) - 3, ACS_HLINE, strlen(OptionHeader->Title) + 4);
         mvwvline(stdscr, r - 3, c - (strlen(OptionHeader->Title)/2) - 3, ACS_VLINE, 4 + 6);
@@ -216,16 +229,16 @@ void Display(void){
                 read(ControlPipe[0],&r,sizeof(int));
                 read(ControlPipe[0],&c,sizeof(int));
                 read(ControlPipe[0],buffer,size);
-                buffer[size-1] = '\0';
+                //buffer[size-1] = '\0';
                 // Render menu option at specified position
-                mvwprintw(stdscr,r,c,"%s",buffer);
+                //mvwprintw(stdscr,r,c,"%s",buffer);
+                mvaddnstr(r,c,buffer,size);
             }
         }
         // Small delay to prevent excessive CPU usage
-        refresh();
         usleep(100);
         // Update the screen with all pending changes
-        
+        refresh();
     }
     // === Cleanup ===
     end:
@@ -364,7 +377,7 @@ void Background(int WP){
 void Control(struct OptionHeader *OptionHeader, int WP){
     // Pipe communication for sending menu updates to display process
     unsigned int r, c, size;    // Message: row, column, size
-    char buffer[256];           // Message text buffer
+    char buffer[512];           // Message text buffer
     int SelectedOption = 0;     // Currently highlighted option index
     int ioscan = 1;             // Input scan result
     int i;
@@ -425,7 +438,7 @@ void Control(struct OptionHeader *OptionHeader, int WP){
             // === Send option text ===
             tr = r + i;
             tc = c - (strlen(((OptionHeader->List)+i)->OptionText)/2);
-            snprintf(buffer, sizeof(buffer), "%s",((OptionHeader->List)+i)->OptionText);
+            strcpy(buffer,((OptionHeader->List)+i)->OptionText);
             size = strlen(buffer) + 1;
             write(WP,&size,sizeof(int));
             write(WP,&tr,sizeof(int));
@@ -617,10 +630,9 @@ int wstrlen(int *buffer){
     }
     return i;
 }
-int wstrcpy(int *dest, int *source){
+int wstrcpy(int *dest,int *source){
     int i = 0;
-    // Copy with bounds checking to prevent overflow (max 512 wide chars)
-    while(source[i]!=0 && i < 511){
+    while(source[i]!=0){
         dest[i] = source[i];
         i++;
     }
