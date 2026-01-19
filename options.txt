@@ -1,0 +1,6 @@
+MAIN MENU
+Continue
+New Game
+Settings
+Quit
+
