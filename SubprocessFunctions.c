@@ -14,6 +14,8 @@ Subprocess Functions Source
 
 #include <sys/mman.h>
 #include <pthread.h>
+#include <linux/input.h>
+#include <fcntl.h>
 
 #include "SubprocessFunctions.h"
 #include "OptionInitializer.h"
@@ -21,6 +23,15 @@ Subprocess Functions Source
 #include "MusicFunctions.h"
 
 void *Display(void *SharedData){
+
+    struct M2Dshared *M2DSharedData = (struct M2Dshared *)SharedData;
+    char RodentPath[256];
+    RodentPath[0] = 0;
+    if(M2DSharedData->UseRodent){
+        printf("enter mouse file path, should look like \"/dev/input/event7\"\n");
+        scanf("%s",RodentPath);
+    }
+
     setlocale(LC_ALL, "");  
     initscr();              
     noecho();               
@@ -33,7 +44,7 @@ void *Display(void *SharedData){
     unsigned int OldMaxCols = MaxCols;
     unsigned int Row,Col;
 
-    struct M2Dshared *M2DSharedData = (struct M2Dshared *)SharedData;
+    
 
     struct D2Sshared *D2SSharedData = (struct D2Sshared *)malloc(sizeof(struct D2Sshared));
     //pthread_mutex_init(&(D2SSharedData->lock), NULL);
@@ -71,6 +82,7 @@ void *Display(void *SharedData){
                 ((DisplayArray + Row*MaxCols+Col)->Data).chars[0] = L' ';
                 ((DisplayArray + Row*MaxCols+Col)->Data).chars[1] = 0;
                 ((DisplayArray + Row*MaxCols+Col)->Priority) = 0;
+                ((DisplayArray + Row*MaxCols+Col)->Cursor) = 0;
             }else{
                 goto terminate;
             }
@@ -86,6 +98,18 @@ void *Display(void *SharedData){
     pthread_t InputID;
     pthread_create(&InputID, NULL, InputScan, MultiShare);
 
+    struct RodentData *RodentData = (struct RodentData *)calloc(1,sizeof(struct RodentData));
+    RodentData->SharedData = D2SSharedData;
+    RodentData->Cursor.attr = A_NORMAL;
+    RodentData->Cursor.chars[0] = '+';
+    RodentData->Cursor.chars[1] = '\0';
+    RodentData->Path = RodentPath;
+
+    pthread_t RodentID;
+    if(M2DSharedData->UseRodent){
+        pthread_create(&RodentID, NULL, Rodent, RodentData);
+    }
+    
     pthread_t TitleID;
     if(M2DSharedData->PlayTitle){
         pthread_create(&TitleID, NULL, TitleSequence, D2SSharedData);
@@ -106,13 +130,20 @@ void *Display(void *SharedData){
         pthread_create(&MusicID, NULL, Music, D2SSharedData); 
     } 
 
+
+
+
     while(M2DSharedData->KillDisplay==0&&M2DSharedData->KillMain==0){
         for(Row=0;Row<MaxRows;Row++){
             for(Col=0;Col<MaxCols;Col++){
 
                 getmaxyx(stdscr,MaxRows,MaxCols);
                 if(OldMaxRows==MaxRows&&OldMaxCols==MaxCols){
-                    mvadd_wch(Row,Col,&((DisplayArray + Row*MaxCols+Col)->Data));
+                    if((DisplayArray + Row*MaxCols+Col)->Cursor){
+                        mvadd_wch(Row,Col,&(RodentData->Cursor));
+                    }else{
+                        mvadd_wch(Row,Col,&((DisplayArray + Row*MaxCols+Col)->Data));
+                    }
                 }else{
                     goto terminate;
                 }  
@@ -137,6 +168,10 @@ void *Display(void *SharedData){
     pthread_cancel(MenuID);
     pthread_join(MenuID, NULL);
 
+    if(M2DSharedData->UseRodent){
+        pthread_cancel(RodentID);
+        pthread_join(RodentID, NULL);
+    }
     if(M2DSharedData->PlayBackground){
         pthread_cancel(BackgroundID);
         pthread_join(BackgroundID, NULL);
@@ -163,6 +198,90 @@ void *Display(void *SharedData){
     pthread_exit(NULL);
     return NULL;
 }
+
+
+void *Rodent(void *TRodentData){
+    struct RodentData *RodentData = (struct RodentData *)TRodentData;
+    
+    float x = (RodentData->SharedData->MaxCols)/2;
+    float y = (RodentData->SharedData->MaxRows)/2;
+    float tempev;
+    float oldx = x;
+    float oldy = y;
+
+//"/dev/input/event7"
+    int fd = open(RodentData->Path, O_RDONLY);
+    if (fd < 0) {
+        perror("open");
+    }
+
+    struct input_event ev;
+
+    while (1) {
+        read(fd, &ev, sizeof(ev));
+
+        /* Mouse movement */
+        if (ev.type == EV_REL && ev.code == REL_X){
+            tempev = ev.value;
+            x+=tempev/6;
+        }
+        if (ev.type == EV_REL && ev.code == REL_Y){
+            tempev = ev.value;
+            y+=tempev/3;
+        }
+
+        if(y<0){
+            y=0;
+        }else if(y>=(RodentData->SharedData->MaxRows)){
+            y=(RodentData->SharedData->MaxRows)-1;
+        }
+        if(x<0){
+            x=0;
+        }else if(x>=(RodentData->SharedData->MaxCols)){
+            x=(RodentData->SharedData->MaxCols)-1;
+        }
+        //clear();
+        
+        (RodentData->SharedData->DisplayArray + ((int)oldy)*(RodentData->SharedData->MaxCols) + ((int)oldx))->Cursor = 0;
+        (RodentData->SharedData->DisplayArray + ((int)y)*(RodentData->SharedData->MaxCols) + ((int)x))->Cursor = 1;
+        oldx = x;
+        oldy = y;
+        
+
+        /* Mouse clicks */
+        if (ev.type == EV_KEY) {
+            if (ev.code == BTN_LEFT){
+                if(ev.value){
+                    RodentData->Cursor.chars[0] = 'L';
+                }else{
+                    RodentData->Cursor.chars[0] = '+';
+                }
+                RodentData->Cursor.chars[1] = '\0';
+            }
+            if (ev.code == BTN_RIGHT){
+                if(ev.value){
+                    RodentData->Cursor.chars[0] = 'R';
+                }else{
+                    RodentData->Cursor.chars[0] = '+';
+                }
+                RodentData->Cursor.chars[1] = '\0';
+            }
+
+
+            if (ev.code == BTN_MIDDLE){
+                if(ev.value){
+                    RodentData->Cursor.chars[0] = 'M';
+                }else{
+                    RodentData->Cursor.chars[0] = '+';
+                }
+                RodentData->Cursor.chars[1] = '\0';
+            }
+                
+        }
+    }
+}
+
+
 
 
 
@@ -444,6 +563,8 @@ void *InputScan(void *TSharedData){
     pfd.fd = STDIN_FILENO;
     pfd.events = POLLIN; 
 
+    //wchar_t timer[8];
+
     flag = 0;
     while(flag==0){
         ReturnValue = poll(&pfd, 1, 0); 
@@ -455,15 +576,19 @@ void *InputScan(void *TSharedData){
     }
 
     UserInput = 0;
-    while(!((UserInput==10||UserInput==13||UserInput==KEY_ENTER)&&SharedData->SubData->SelectedOption==2)){
+    while(!((UserInput==10||UserInput==13)&&SharedData->SubData->SelectedOption==2)){
         UserInput = getch();
+
+        // swprintf(timer,8,L"        ");
+        // swprintf(timer,8,L"%d",UserInput);
+        // Pfuencode((SharedData->SubData->DisplayArray + SharedData->SubData->MaxCols + 1), timer, A_NORMAL, wstrlen(timer),0);
         switch(UserInput){
-            case KEY_DOWN:
+            case 258:
                 if(SharedData->SubData->SelectedOption<(SharedData->SubData->OptionHeader->OptionCount-1)){
                     (SharedData->SubData->SelectedOption)++;
                 }
                 break;
-            case KEY_UP:
+            case 259:
                 if(SharedData->SubData->SelectedOption>0){
                     (SharedData->SubData->SelectedOption)--;
                 }

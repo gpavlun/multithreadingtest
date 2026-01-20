@@ -18,12 +18,13 @@
 
 #include "SubprocessFunctions.h"
 
-void MainMenu(char PlayMusic, char PlayTitle, char PlayBackground);
+void MainMenu(char UseRodent, char PlayMusic, char PlayTitle, char PlayBackground);
 
 int main(int ArgCount, char *ArgList[]){
     char PlayMusic = 0;
     char PlayTitle = 0;
     char PlayBackground = 0;
+    char UseRodent = 0;
 
     for(int i=0;i<ArgCount;i++){
         if(strcmp(ArgList[i],"-music")==0){
@@ -32,19 +33,22 @@ int main(int ArgCount, char *ArgList[]){
             PlayTitle = 1;
         }else if(strcmp(ArgList[i],"-background")==0){
             PlayBackground = 1;
+        }else if(strcmp(ArgList[i],"-rodent")==0){
+            UseRodent = 1;
         }
     }
     
-    MainMenu(PlayMusic,PlayTitle,PlayBackground);
+    MainMenu(UseRodent,PlayMusic,PlayTitle,PlayBackground);
     return 0;
 }
 
-void MainMenu(char PlayMusic, char PlayTitle, char PlayBackground){
+void MainMenu(char UseRodent, char PlayMusic, char PlayTitle, char PlayBackground){
     
     struct M2Dshared *SharedData = (struct M2Dshared *)malloc(sizeof(struct M2Dshared));
 
     SharedData->KillMain = 0;
     SharedData->KillDisplay = 0;
+    SharedData->UseRodent = UseRodent;
     SharedData->PlayMusic = PlayMusic;
     SharedData->PlayTitle = PlayTitle;
     SharedData->PlayBackground = PlayBackground;

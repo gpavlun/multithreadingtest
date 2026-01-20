@@ -13,6 +13,7 @@ struct MultiShare{
 struct M2Dshared{
     unsigned char KillMain;
     unsigned char KillDisplay;
+    unsigned char UseRodent;
     unsigned char PlayMusic;
     unsigned char PlayTitle;
     unsigned char PlayBackground;
@@ -45,11 +46,18 @@ struct Parameters{
 struct Pixel{
     uint8_t Priority;
     cchar_t Data;
+    uint8_t Cursor;
+};
+struct RodentData{
+    struct D2Sshared *SharedData;
+    cchar_t Cursor;
+    char *Path;
 };
 
 
 void *Resize(void *);
 void *Display(void *);
+void *Rodent(void *TRodentData);
 void *Background(void *);
 void *Control(void *);
 void *InputScan(void *);
