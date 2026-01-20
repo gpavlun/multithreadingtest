@@ -139,6 +139,7 @@ void *Display(void *SharedData){
 
                 getmaxyx(stdscr,MaxRows,MaxCols);
                 if(OldMaxRows==MaxRows&&OldMaxCols==MaxCols){
+
                     if((DisplayArray + Row*MaxCols+Col)->Cursor){
                         mvadd_wch(Row,Col,&(RodentData->Cursor));
                     }else{
@@ -211,8 +212,8 @@ void *Rodent(void *TRodentData){
 
 //"/dev/input/event7"
     int fd = open(RodentData->Path, O_RDONLY);
-    if (fd < 0) {
-        perror("open");
+    while(fd < 0){
+        sleep(1);
     }
 
     struct input_event ev;
@@ -223,11 +224,11 @@ void *Rodent(void *TRodentData){
         /* Mouse movement */
         if (ev.type == EV_REL && ev.code == REL_X){
             tempev = ev.value;
-            x+=tempev/6;
+            x+=tempev/4;
         }
         if (ev.type == EV_REL && ev.code == REL_Y){
             tempev = ev.value;
-            y+=tempev/3;
+            y+=tempev/7;
         }
 
         if(y<0){
