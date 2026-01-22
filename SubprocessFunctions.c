@@ -27,10 +27,10 @@ void *Display(void *SharedData){
     struct M2Dshared *M2DSharedData = (struct M2Dshared *)SharedData;
     char RodentPath[256];
     RodentPath[0] = 0;
-    if(M2DSharedData->UseRodent){
-        printf("enter mouse file path, should look like \"/dev/input/event7\"\n");
-        scanf("%s",RodentPath);
-    }
+    //if(M2DSharedData->UseRodent){
+        //printf("enter mouse file path, should look like \"/dev/input/event7\"\n");
+        //scanf("%s",RodentPath);
+    //}
 
     setlocale(LC_ALL, "");  
     initscr();              
@@ -103,7 +103,7 @@ void *Display(void *SharedData){
     RodentData->Cursor.attr = A_NORMAL;
     RodentData->Cursor.chars[0] = '+';
     RodentData->Cursor.chars[1] = '\0';
-    RodentData->Path = RodentPath;
+    RodentData->Paths = RodentPath;
 
     pthread_t RodentID;
     if(M2DSharedData->UseRodent){
@@ -201,7 +201,62 @@ void *Display(void *SharedData){
 }
 
 
+
+
+
+
+
+
+
+
+
+#define BITS_PER_LONG   (sizeof(unsigned long) * 8)
+#define NBITS(x)        ((((x) - 1) / BITS_PER_LONG) + 1)
+#define TEST_BIT(bit, array) ((array[(bit) / BITS_PER_LONG] >> ((bit) % BITS_PER_LONG)) & 1)
+
+int is_mouse(int fd) {
+    unsigned long evbit[NBITS(EV_MAX)];
+    unsigned long relbit[NBITS(REL_MAX)];
+    unsigned long keybit[NBITS(KEY_MAX)];
+
+    memset(evbit, 0, sizeof(evbit));
+    memset(relbit, 0, sizeof(relbit));
+    memset(keybit, 0, sizeof(keybit));
+
+    if (ioctl(fd, EVIOCGBIT(0, sizeof(evbit)), evbit) < 0)
+        return 0;
+
+    if (!TEST_BIT(EV_REL, evbit))
+        return 0;
+
+    ioctl(fd, EVIOCGBIT(EV_REL, sizeof(relbit)), relbit);
+    ioctl(fd, EVIOCGBIT(EV_KEY, sizeof(keybit)), keybit);
+
+    return TEST_BIT(REL_X, relbit) && TEST_BIT(REL_Y, relbit) && TEST_BIT(BTN_LEFT, keybit);
+}
+
+
 void *Rodent(void *TRodentData){
+
+    char path[64];
+
+    char *paths = malloc(sizeof(path));
+    int npaths = 0;
+
+    for (int i = 0; i < 32; i++) {
+        snprintf(path, sizeof(path), "/dev/input/event%d", i);
+
+        int fd = open(path, O_RDONLY);
+
+        if(fd>=0&&is_mouse(fd)){
+            strcpy(paths+npaths, path);
+            npaths++;
+            paths = realloc(paths,sizeof(path)*npaths);
+            //printf("Mouse: %s\n", paths);
+        }
+        close(fd);
+    }
+
     struct RodentData *RodentData = (struct RodentData *)TRodentData;
     
     float x = (RodentData->SharedData->MaxCols)/2;
@@ -209,17 +264,26 @@ void *Rodent(void *TRodentData){
     float tempev;
     float oldx = x;
     float oldy = y;
+    RodentData->Paths = paths;
 
 //"/dev/input/event7"
-    int fd = open(RodentData->Path, O_RDONLY);
-    while(fd < 0){
-        sleep(1);
-    }
-
+    int fd;
     struct input_event ev;
+    int currentpath = 0;
 
+    fd = open(RodentData->Paths + currentpath, O_RDONLY);
     while (1) {
+        
+        while(fd < 0){
+            continue;
+        }
+
         read(fd, &ev, sizeof(ev));
+
+        currentpath++;
+        if(!(currentpath<npaths)){
+            currentpath=0;
+        }
 
         /* Mouse movement */
         if (ev.type == EV_REL && ev.code == REL_X){

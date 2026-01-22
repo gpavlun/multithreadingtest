@@ -51,7 +51,7 @@ struct Pixel{
 struct RodentData{
     struct D2Sshared *SharedData;
     cchar_t Cursor;
-    char *Path;
+    char *Paths;
 };
 
 
