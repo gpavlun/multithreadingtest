@@ -32,8 +32,10 @@ int main(void)
     float tempev;
     float oldx = x;
     float oldy = y;
+    char curser = '+';
 
-    int fd = open("/dev/input/event6", O_RDONLY);
+
+    int fd = open("/dev/input/event7", O_RDONLY);
     if (fd < 0) {
         perror("open");
         return 1;
@@ -76,7 +78,7 @@ int main(void)
         }
         //clear();
         mvprintw(oldy,oldx," ");
-        mvprintw(y,x,"+");
+        mvprintw(y,x,"%c",curser);
         oldx = x;
         oldy = y;
         
@@ -85,10 +87,17 @@ int main(void)
         if (ev.type == EV_KEY) {
             if (ev.code == BTN_LEFT){
                 mvprintw(3,1,"Left %s\n", ev.value ? "down" : "up");
+                if(ev.value){
+                    curser = 'x';
+                }else{
+                    curser = '+';
+                }
+            }
+            if (ev.code == BTN_RIGHT){
+                mvprintw(4,1,"Right %s\n", ev.value ? "down" : "up");
                 goto end;
             }
-            if (ev.code == BTN_RIGHT)
-                mvprintw(4,1,"Right %s\n", ev.value ? "down" : "up");
+
 
             if (ev.code == BTN_MIDDLE)
                 mvprintw(5,1,"Middle %s\n", ev.value ? "down" : "up");
